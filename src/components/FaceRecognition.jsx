@@ -4,6 +4,66 @@ import { useAuth } from '../hooks/useAuth'
 import { API_BASE_URL } from '../config/api'
 import { loadFaceModels } from '../utils/faceApi'
 
+const descriptorStorageKey = (email) => email ? `faceDescriptors_${email}` : null
+
+const serializeDescriptor = (descriptor) => Array.from(descriptor)
+
+const saveDescriptor = (email, descriptor) => {
+  const key = descriptorStorageKey(email)
+  if (!key) return
+  try {
+    localStorage.setItem(key, JSON.stringify([serializeDescriptor(descriptor)]))
+  } catch (error) {
+    console.error('Erro ao salvar descritor facial localmente:', error)
+  }
+}
+
+const loadStoredDescriptors = (email) => {
+  const key = descriptorStorageKey(email)
+  if (!key) return []
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(values => new Float32Array(values))
+  } catch (error) {
+    console.error('Erro ao carregar descritores salvos localmente:', error)
+    return []
+  }
+}
+
+const float32ToBase64 = (array) => {
+  const buffer = new Uint8Array(new Float32Array(array).buffer)
+  let binary = ''
+  buffer.forEach(byte => { binary += String.fromCharCode(byte) })
+  return window.btoa(binary)
+}
+
+const base64ToFloat32 = (base64) => {
+  try {
+    const binary = window.atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return new Float32Array(bytes.buffer)
+  } catch (error) {
+    console.error('Erro ao converter Base64 para Float32Array:', error)
+    return null
+  }
+}
+
+const byteArrayToFloat32 = (byteArray) => {
+  try {
+    const bytes = new Uint8Array(byteArray)
+    return new Float32Array(bytes.buffer)
+  } catch (error) {
+    console.error('Erro ao converter byte[] para Float32Array:', error)
+    return null
+  }
+}
+
 export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUser }) {
   const { login, currentUser } = useAuth()
   const [status, setStatus] = useState('Inicializando câmera...')
@@ -55,8 +115,17 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
         email = localStorage.getItem('registeringEmail')
       }
       
-      const savedDescriptors = email ? localStorage.getItem(`faceDescriptors_${email}`) : null
-      const isRegistering = !savedDescriptors
+      const storedDescriptors = loadStoredDescriptors(email)
+      const backendEmbedding = currentUser?.faceEmbedding
+      const backendDescriptor = backendEmbedding
+        ? (typeof backendEmbedding === 'string'
+            ? base64ToFloat32(backendEmbedding)
+            : Array.isArray(backendEmbedding)
+              ? byteArrayToFloat32(backendEmbedding)
+              : null)
+        : null
+
+      const isRegistering = !!pendingUser
       let attempts = 0
       const maxAttempts = 50
 
@@ -88,41 +157,34 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
                 stream.getTracks().forEach(track => track.stop())
                 return
               }
-              // Converter para Base64
-              function float32ToBase64(array) {
-                let buf = new Uint8Array(new Float32Array(array).buffer);
-                let binary = '';
-                for (let i = 0; i < buf.byteLength; i++) {
-                  binary += String.fromCharCode(buf[i]);
-                }
-                return window.btoa(binary);
-              }
-              const embeddingBase64 = float32ToBase64(Array.from(descriptor));
-              const userData = { ...pendingUser, faceEmbedding: embeddingBase64 };
-              fetch(`${API_BASE_URL}/users`, {
-                method: 'POST',
+              const embeddingBase64 = float32ToBase64(Array.from(descriptor))
+              const userData = { ...pendingUser, faceEmbedding: embeddingBase64 }
+              fetch(`${API_BASE_URL}/users/${pendingUser.id}`, {
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(userData)
               })
                 .then(async response => {
-                  if (!response.ok) throw new Error('Erro ao registrar usuário no backend');
-                  const userCreated = await response.json();
-                  setStatus('Rosto cadastrado com sucesso no backend!');
-                  setProgress(100);
+                  if (!response.ok) throw new Error('Erro ao registrar usuário no backend')
+                  const userUpdated = await response.json()
+                  saveDescriptor(pendingUser.email, descriptor)
+                  localStorage.removeItem('registeringEmail')
+                  setStatus('Rosto cadastrado com sucesso no backend!')
+                  setProgress(100)
                   setTimeout(() => {
                     stream.getTracks().forEach(track => track.stop())
                     // Fazer login automático com o usuário criado
-                    login(userCreated)
+                    login(userUpdated)
                     onPageChange('dashboard')
-                  }, 1500);
+                  }, 1500)
                 })
                 .catch((err) => {
-                  setStatus('Erro ao salvar no backend');
-                  setIsProcessing(false);
+                  setStatus('Erro ao salvar no backend')
+                  setIsProcessing(false)
                   stream.getTracks().forEach(track => track.stop())
                   alert('Erro ao registrar usuário no backend: ' + err.message)
-                });
-              return;
+                })
+              return
             } else {
               // Verificar rosto
               if (!email || !currentUser) {
@@ -131,19 +193,26 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
                 stream.getTracks().forEach(track => track.stop())
                 return
               }
-              
-              const savedDescriptors = JSON.parse(localStorage.getItem(`faceDescriptors_${email}`))
-              
-              if (savedDescriptors && savedDescriptors.length > 0) {
-                const faceMatcher = new faceapi.FaceMatcher(savedDescriptors, 0.6)
+
+              let descriptorsToCompare = storedDescriptors
+              if ((!descriptorsToCompare || descriptorsToCompare.length === 0) && backendDescriptor) {
+                descriptorsToCompare = [backendDescriptor]
+                saveDescriptor(email, backendDescriptor)
+              }
+
+              if (descriptorsToCompare && descriptorsToCompare.length > 0) {
+                const labeledDescriptors = [new faceapi.LabeledFaceDescriptors('person0', descriptorsToCompare)]
+                const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6)
                 const bestMatch = faceMatcher.findBestMatch(descriptor)
                 
                 if (bestMatch.label === 'person0' && bestMatch.distance < 0.6) {
                   setStatus('Rosto reconhecido!')
                   setProgress(100)
+                  saveDescriptor(email, descriptor)
                   
                   setTimeout(() => {
                     stream.getTracks().forEach(track => track.stop())
+                    login(currentUser)
                     onPageChange('dashboard')
                   }, 1500)
                 } else {
@@ -151,7 +220,7 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
                   setTimeout(detectFace, 500)
                 }
               } else {
-                setStatus('Erro: Descritor facial não encontrado')
+                setStatus('Erro: Descritor facial não encontrado no dispositivo')
                 setIsProcessing(false)
                 stream.getTracks().forEach(track => track.stop())
               }
