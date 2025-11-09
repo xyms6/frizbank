@@ -2871,6 +2871,7 @@ body.dark-mode .stat-value {
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    color: #1e293b;
 }
 
 .modal-header {
@@ -2885,6 +2886,29 @@ body.dark-mode .stat-value {
     font-size: 20px;
     color: #1e293b;
     margin: 0;
+}
+
+.modal-body {
+    padding: 24px;
+    color: #1e293b;
+}
+
+.modal-body .form-group label {
+    color: #1e293b;
+    font-weight: 500;
+}
+
+.modal-body .form-group input,
+.modal-body .form-group select {
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    color: #1e293b;
+}
+
+.modal-body .form-group input:focus,
+.modal-body .form-group select:focus {
+    border-color: #6366f1;
+    background: #ffffff;
 }
 
 .modal-close {
@@ -3106,6 +3130,27 @@ body.dark-mode .modal-close {
 body.dark-mode .modal-close:hover {
     background: #334155;
     color: #f1f5f9;
+}
+
+body.dark-mode .modal-body {
+    color: #f1f5f9;
+}
+
+body.dark-mode .modal-body .form-group label {
+    color: #f1f5f9;
+}
+
+body.dark-mode .modal-body .form-group input,
+body.dark-mode .modal-body .form-group select {
+    background: #334155;
+    border-color: #475569;
+    color: #f1f5f9;
+}
+
+body.dark-mode .modal-body .form-group input:focus,
+body.dark-mode .modal-body .form-group select:focus {
+    border-color: #14b8a6;
+    background: #475569;
 }
 
 body.dark-mode .form-group input,

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { API_BASE_URL } from '../config/api'
 
 export function useCrypto(currency = 'USD') {
   const [cryptoData, setCryptoData] = useState([])
@@ -8,21 +9,18 @@ export function useCrypto(currency = 'USD') {
   const fetchCryptoData = async () => {
     try {
       setLoading(true)
-      // API CoinGecko para buscar criptomoedas
-      const response = await fetch(
-        'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false'
-      )
+      setError(null)
+      
+      // Buscar do backend (que faz proxy para CoinGecko)
+      const vsCurrency = currency.toLowerCase()
+      const response = await fetch(`${API_BASE_URL}/crypto/markets?vsCurrency=${vsCurrency}&perPage=10`)
       
       if (!response.ok) {
-        throw new Error('Erro ao buscar dados de criptomoedas')
+        throw new Error('Erro ao buscar criptomoedas')
       }
       
       const data = await response.json()
       setCryptoData(data)
-      setError(null)
-    } catch (err) {
-      console.error('Erro ao buscar criptomoedas:', err)
-      setError(err.message)
     } finally {
       setLoading(false)
     }

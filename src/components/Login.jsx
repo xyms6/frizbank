@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { API_BASE_URL } from '../config/api'
 
 export default function Login({ onPageChange }) {
   const { login } = useAuth()
@@ -7,26 +8,36 @@ export default function Login({ onPageChange }) {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     
-    const users = JSON.parse(localStorage.getItem('users') || '[]')
-    const user = users.find(u => u.email === email && u.password === password)
+    // Buscar usuário no backend
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
 
-    if (!user) {
-      alert('Email ou senha incorretos!')
-      return
+      if (response.status === 401 || !response.ok) {
+        alert('Email ou senha incorretos!')
+        return
+      }
+
+      const user = await response.json()
+
+      if (!user.faceEmbedding) {
+        alert('Você precisa cadastrar seu rosto primeiro!')
+        onPageChange('register')
+        return
+      }
+
+      login(user)
+      onPageChange('face-recognition')
+    } catch (error) {
+      alert('Erro ao fazer login. Tente novamente.')
+      console.error('Erro:', error)
     }
-
-    const savedDescriptors = localStorage.getItem(`faceDescriptors_${email}`)
-    if (!savedDescriptors) {
-      alert('Você precisa cadastrar seu rosto primeiro!')
-      onPageChange('register')
-      return
-    }
-
-    login(user)
-    onPageChange('face-recognition')
   }
 
   return (

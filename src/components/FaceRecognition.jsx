@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
+import * as faceapi from 'face-api.js'
 import { useAuth } from '../hooks/useAuth'
+import { API_BASE_URL } from '../config/api'
 import { loadFaceModels } from '../utils/faceApi'
 
-export default function FaceRecognition({ onPageChange, modelsLoaded }) {
+export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUser }) {
   const { login, currentUser } = useAuth()
   const [status, setStatus] = useState('Inicializando câmera...')
   const [progress, setProgress] = useState(0)
@@ -80,34 +82,47 @@ export default function FaceRecognition({ onPageChange, modelsLoaded }) {
             const descriptor = detection.descriptor
             
             if (isRegistering) {
-              // Registrar rosto
-              if (!email) {
-                setStatus('Erro: Email não encontrado')
+              if (!pendingUser || !pendingUser.email) {
+                setStatus('Erro: Dados de usuário não recebidos')
                 setIsProcessing(false)
                 stream.getTracks().forEach(track => track.stop())
                 return
               }
-              
-              const faceDescriptors = {}
-              faceDescriptors[email] = [descriptor]
-              localStorage.setItem(`faceDescriptors_${email}`, JSON.stringify(faceDescriptors[email]))
-              localStorage.removeItem('registeringEmail')
-              
-              setStatus('Rosto cadastrado com sucesso!')
-              setProgress(100)
-              
-              setTimeout(() => {
-                stream.getTracks().forEach(track => track.stop())
-                const users = JSON.parse(localStorage.getItem('users') || '[]')
-                const user = users.find(u => u.email === email)
-                if (user) {
-                  login(user)
-                  onPageChange('dashboard')
-                } else {
-                  alert('Erro ao fazer login automático')
-                  onPageChange('login')
+              // Converter para Base64
+              function float32ToBase64(array) {
+                let buf = new Uint8Array(new Float32Array(array).buffer);
+                let binary = '';
+                for (let i = 0; i < buf.byteLength; i++) {
+                  binary += String.fromCharCode(buf[i]);
                 }
-              }, 1500)
+                return window.btoa(binary);
+              }
+              const embeddingBase64 = float32ToBase64(Array.from(descriptor));
+              const userData = { ...pendingUser, faceEmbedding: embeddingBase64 };
+              fetch(`${API_BASE_URL}/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(userData)
+              })
+                .then(async response => {
+                  if (!response.ok) throw new Error('Erro ao registrar usuário no backend');
+                  const userCreated = await response.json();
+                  setStatus('Rosto cadastrado com sucesso no backend!');
+                  setProgress(100);
+                  setTimeout(() => {
+                    stream.getTracks().forEach(track => track.stop())
+                    // Fazer login automático com o usuário criado
+                    login(userCreated)
+                    onPageChange('dashboard')
+                  }, 1500);
+                })
+                .catch((err) => {
+                  setStatus('Erro ao salvar no backend');
+                  setIsProcessing(false);
+                  stream.getTracks().forEach(track => track.stop())
+                  alert('Erro ao registrar usuário no backend: ' + err.message)
+                });
+              return;
             } else {
               // Verificar rosto
               if (!email || !currentUser) {

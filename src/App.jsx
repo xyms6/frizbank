@@ -11,6 +11,7 @@ function App() {
   const { currentUser, checkAuth } = useAuth()
   const [page, setPage] = useState('landing')
   const [modelsLoaded, setModelsLoaded] = useState(false)
+  const [pendingUser, setPendingUser] = useState(null)
 
   useEffect(() => {
     // Carregar modelos em background
@@ -31,19 +32,32 @@ function App() {
     }
   }, [])
 
+  const handleRegisteredUser = (userData) => {
+    setPendingUser(userData)
+  }
+
   const handlePageChange = (newPage) => {
     setPage(newPage)
+    if (newPage !== 'face-recognition') {
+      setPendingUser(null) // Limpa após cadastro biométrico
+    }
   }
 
   return (
     <>
       {page === 'landing' && <Landing onPageChange={handlePageChange} />}
       {page === 'login' && <Login onPageChange={handlePageChange} />}
-      {page === 'register' && <Register onPageChange={handlePageChange} />}
+      {page === 'register' && (
+        <Register 
+          onPageChange={handlePageChange}
+          onRegisteredUser={handleRegisteredUser}
+        />
+      )}
       {page === 'face-recognition' && (
         <FaceRecognition 
           onPageChange={handlePageChange} 
           modelsLoaded={modelsLoaded}
+          pendingUser={pendingUser}
         />
       )}
       {page === 'dashboard' && (

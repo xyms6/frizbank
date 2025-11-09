@@ -79,12 +79,21 @@ export async function getExchangeRate(from, to) {
 
 // Formatar moeda
 export function formatCurrency(value, currency = 'USD') {
-  const formatter = new Intl.NumberFormat('pt-BR', {
+  let locale = 'en-US';
+  switch (currency.toUpperCase()) {
+    case 'BRL': locale = 'pt-BR'; break;
+    case 'USD': locale = 'en-US'; break;
+    case 'EUR': locale = 'de-DE'; break;
+    case 'GBP': locale = 'en-GB'; break;
+    case 'JPY': locale = 'ja-JP'; break;
+    default: locale = currency;
+  }
+  const formatter = new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
-  return formatter.format(value)
+  return formatter.format(Number(value))
 }
 

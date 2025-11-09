@@ -1,29 +1,48 @@
 import { useState } from 'react'
-import { useAuth } from '../hooks/useAuth'
+import { API_BASE_URL } from '../config/api'
 
-export default function Register({ onPageChange }) {
-  const { register } = useAuth()
+export default function Register({ onPageChange, onRegisteredUser }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    
-    const existingUsers = JSON.parse(localStorage.getItem('users') || '[]')
-    if (existingUsers.find(u => u.email === email)) {
-      alert('Este email já está cadastrado!')
+    if (!email || !password || !name) {
+      setError('Preencha todos os campos')
       return
     }
 
-    const user = { name, email, password }
-    register(user)
-    
-    // Salvar email temporariamente para o reconhecimento facial
-    localStorage.setItem('registeringEmail', email)
-    
-    onPageChange('face-recognition')
+    setError('')
+    setLoading(true)
+
+    fetch(`${API_BASE_URL}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password })
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const text = await response.text()
+          throw new Error(text || 'Erro ao criar usuário')
+        }
+        return response.json()
+      })
+      .then((userCreated) => {
+        localStorage.setItem('registeringEmail', userCreated.email)
+        if (typeof onRegisteredUser === 'function') {
+          onRegisteredUser(userCreated)
+        }
+        onPageChange('face-recognition')
+      })
+      .catch((err) => {
+        console.error('Erro no cadastro:', err)
+        setError('Não foi possível criar sua conta. Tente novamente.')
+      })
+      .finally(() => setLoading(false))
   }
 
   return (
@@ -40,11 +59,11 @@ export default function Register({ onPageChange }) {
                 ← Voltar
               </button>
             </div>
-            
+
             <div className="login-main">
               <h1 className="login-title">Crie sua conta</h1>
               <p className="login-subtitle">Comece sua jornada no mundo das criptomoedas.</p>
-              
+
               <form className="login-form" onSubmit={handleSubmit}>
                 <div className="form-group-login">
                   <label htmlFor="register-name">Nome completo</label>
@@ -57,7 +76,7 @@ export default function Register({ onPageChange }) {
                     required
                   />
                 </div>
-                
+
                 <div className="form-group-login">
                   <label htmlFor="register-email">Email</label>
                   <input
@@ -69,7 +88,7 @@ export default function Register({ onPageChange }) {
                     required
                   />
                 </div>
-                
+
                 <div className="form-group-login">
                   <label htmlFor="register-password">Senha</label>
                   <div className="password-wrapper">
@@ -91,21 +110,24 @@ export default function Register({ onPageChange }) {
                     </button>
                   </div>
                 </div>
-                
-                <button type="submit" className="btn-login-primary">Criar conta</button>
+
+                {error && <p className="error-message">{error}</p>}
+                <button type="submit" className="btn-login-primary" disabled={loading}>
+                  {loading ? 'Criando conta...' : 'Criar conta'}
+                </button>
               </form>
-              
+
               <p className="login-register">
                 Já tem uma conta? <a href="#" onClick={(e) => { e.preventDefault(); onPageChange('login'); }}>Entre aqui</a>
               </p>
             </div>
-            
+
             <div className="login-footer">
               <p>Copyright © 2025 FrizBank Enterprises LTD.</p>
             </div>
           </div>
         </div>
-        
+
         <div className="login-right register-right">
           <div className="preview-content">
             <h2 className="preview-title">Bem-vindo ao FrizBank!</h2>
