@@ -9,40 +9,54 @@ export default function Register({ onPageChange, onRegisteredUser }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!email || !password || !name) {
       setError('Preencha todos os campos')
       return
     }
 
+    if (password.length < 6) {
+      setError('A senha deve ter no mínimo 6 caracteres')
+      return
+    }
+
     setError('')
     setLoading(true)
 
-    fetch(`${API_BASE_URL}/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password })
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const text = await response.text()
-          throw new Error(text || 'Erro ao criar usuário')
-        }
-        return response.json()
+    try {
+      const response = await fetch(`${API_BASE_URL}/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
       })
-      .then((userCreated) => {
-        localStorage.setItem('registeringEmail', userCreated.email)
-        if (typeof onRegisteredUser === 'function') {
-          onRegisteredUser(userCreated)
-        }
-        onPageChange('face-recognition')
-      })
-      .catch((err) => {
-        console.error('Erro no cadastro:', err)
-        setError('Não foi possível criar sua conta. Tente novamente.')
-      })
-      .finally(() => setLoading(false))
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Erro ao criar usuário:', response.status, errorText)
+        throw new Error(errorText || `Erro ao criar usuário (${response.status})`)
+      }
+
+      const userCreated = await response.json()
+      console.log('Usuário criado com sucesso:', userCreated)
+      
+      if (!userCreated || !userCreated.id) {
+        throw new Error('Resposta do servidor inválida: usuário sem ID')
+      }
+
+      localStorage.setItem('registeringEmail', userCreated.email)
+      
+      if (typeof onRegisteredUser === 'function') {
+        onRegisteredUser(userCreated)
+      }
+      
+      onPageChange('face-recognition')
+    } catch (err) {
+      console.error('Erro no cadastro:', err)
+      setError(err.message || 'Não foi possível criar sua conta. Tente novamente.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

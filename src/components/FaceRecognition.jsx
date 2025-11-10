@@ -51,6 +51,15 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
       streamRef.current = stream
       videoRef.current.srcObject = stream
 
+      // Aguardar o vídeo estar pronto
+      await new Promise((resolve) => {
+        if (videoRef.current.readyState >= 2) {
+          resolve()
+        } else {
+          videoRef.current.onloadedmetadata = () => resolve()
+        }
+      })
+
       setStatus('Posicione seu rosto na frente da câmera...')
       setProgress(30)
 
@@ -66,8 +75,17 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
         return
       }
 
+      if (isRegistering && (!pendingUser || !pendingUser.id)) {
+        setStatus('Erro: Dados de usuário incompletos')
+        setIsProcessing(false)
+        stream.getTracks().forEach(track => track.stop())
+        return
+      }
+
       let attempts = 0
-      const maxAttempts = 50
+      const maxAttempts = 100
+      let detectionCount = 0
+      const requiredDetections = 3 // Validar rosto 3 vezes antes de salvar
 
       const detectFace = async () => {
         if (attempts >= maxAttempts) {
@@ -79,7 +97,7 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
         }
 
         attempts++
-        setProgress(30 + (attempts / maxAttempts) * 50)
+        setProgress(30 + Math.min((attempts / maxAttempts) * 50, 80))
 
         try {
           const detection = await faceapi
@@ -90,14 +108,33 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
           if (detection) {
             const descriptor = detection.descriptor
             
+            // Validar qualidade do rosto detectado
+            const box = detection.detection.box
+            const faceSize = Math.max(box.width, box.height)
+            const minFaceSize = 100 // Tamanho mínimo do rosto
+            
+            if (faceSize < minFaceSize) {
+              setStatus('Aproxime-se mais da câmera...')
+              setTimeout(detectFace, 300)
+              return
+            }
+
+            detectionCount++
+            
             if (isRegistering) {
-              if (!pendingUser || !pendingUser.email) {
-                setStatus('Erro: Dados de usuário não recebidos')
-                setIsProcessing(false)
-                stream.getTracks().forEach(track => track.stop())
+              // Para registro, validar rosto algumas vezes antes de salvar
+              if (detectionCount < requiredDetections) {
+                setStatus(`Validando rosto... (${detectionCount}/${requiredDetections})`)
+                setTimeout(detectFace, 300)
                 return
               }
+
+              setStatus('Salvando rosto no servidor...')
+              setProgress(85)
+
+              // Converter descriptor para array de bytes (base64)
               const embeddingBase64 = float32ToBase64(Array.from(descriptor))
+              
               try {
                 const response = await fetch(`${API_BASE_URL}/users/${pendingUser.id}/face`, {
                   method: 'POST',
@@ -106,12 +143,15 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
                 })
 
                 if (!response.ok) {
-                  throw new Error('Erro ao registrar usuário no backend')
+                  const errorText = await response.text()
+                  console.error('Erro do backend:', errorText)
+                  throw new Error(errorText || 'Erro ao salvar rosto no servidor')
                 }
 
                 const userUpdated = await response.json()
                 setStatus('Rosto cadastrado com sucesso!')
                 setProgress(100)
+                
                 setTimeout(() => {
                   stream.getTracks().forEach(track => track.stop())
                   login(userUpdated)
@@ -119,14 +159,14 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
                 }, 1500)
               } catch (error) {
                 console.error('Erro ao registrar rosto:', error)
-                setStatus('Erro ao salvar rosto. Tente novamente.')
+                setStatus(`Erro: ${error.message}. Tente novamente.`)
                 setIsProcessing(false)
                 stream.getTracks().forEach(track => track.stop())
-                alert(error.message)
+                alert(`Erro ao salvar rosto: ${error.message}`)
               }
               return
             } else {
-              // Verificar rosto
+              // Verificar rosto (login)
               if (!currentUser) {
                 setStatus('Erro: Usuário não encontrado')
                 setIsProcessing(false)
@@ -134,7 +174,9 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
                 return
               }
 
+              setStatus('Verificando rosto...')
               const embeddingBase64 = float32ToBase64(Array.from(descriptor))
+              
               try {
                 const response = await fetch(`${API_BASE_URL}/users/verify-face`, {
                   method: 'POST',
@@ -144,6 +186,7 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
 
                 if (!response.ok) {
                   setStatus('Rosto não reconhecido. Tente novamente...')
+                  detectionCount = 0 // Reset contador
                   setTimeout(detectFace, 500)
                   return
                 }
@@ -151,6 +194,7 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
                 const verifiedUser = await response.json()
                 setStatus('Rosto reconhecido!')
                 setProgress(100)
+                
                 setTimeout(() => {
                   stream.getTracks().forEach(track => track.stop())
                   login(verifiedUser)
@@ -159,16 +203,19 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
               } catch (error) {
                 console.error('Erro ao verificar rosto:', error)
                 setStatus('Falha na verificação. Tente novamente...')
+                detectionCount = 0 // Reset contador
                 setTimeout(detectFace, 500)
               }
             }
           } else {
+            detectionCount = 0 // Reset contador quando não detecta rosto
             setStatus('Nenhum rosto detectado. Posicione-se melhor...')
             setTimeout(detectFace, 500)
           }
         } catch (error) {
           console.error('Erro na detecção:', error)
           setStatus('Erro na detecção. Tente novamente...')
+          detectionCount = 0 // Reset contador
           setTimeout(detectFace, 500)
         }
       }
