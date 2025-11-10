@@ -198,6 +198,12 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
           
           if (isRegistering) {
             // Salvar rosto no cadastro
+            setProgress(85)
+            setStatus('Enviando para o servidor...')
+            
+            console.log('Enviando rosto para:', `${API_BASE_URL}/users/${userId}/face`)
+            console.log('Tamanho do embedding:', embeddingBase64.length)
+            
             const response = await fetch(`${API_BASE_URL}/users/${userId}/face`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -206,8 +212,19 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
 
             if (!response.ok) {
               const errorText = await response.text()
-              console.error('Erro do servidor:', errorText)
-              throw new Error(errorText || 'Erro ao salvar rosto no servidor')
+              console.error('Erro do servidor:', response.status, errorText)
+              
+              let errorMessage = 'Erro ao salvar rosto no servidor'
+              if (errorText) {
+                try {
+                  const errorJson = JSON.parse(errorText)
+                  errorMessage = errorJson.message || errorText
+                } catch {
+                  errorMessage = errorText
+                }
+              }
+              
+              throw new Error(errorMessage)
             }
 
             const userUpdated = await response.json()
