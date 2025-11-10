@@ -116,24 +116,70 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
       )
 
       if (detection) {
-        setProgress(60)
-        setStatus('Rosto detectado! Processando...')
+        setProgress(50)
+        setStatus('Rosto detectado! Extraindo características...')
         
-        // Obter descriptor do rosto
-        const fullDetection = await faceapi
-          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
-          .withFaceLandmarks()
-          .withFaceDescriptor()
-
+        // Aguardar um pouco para garantir estabilidade
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        setProgress(60)
+        setStatus('Processando rosto...')
+        
+        // Obter descriptor do rosto com timeout e retry
+        let fullDetection
+        let attempts = 0
+        const maxAttempts = 3
+        
+        while (attempts < maxAttempts && !fullDetection) {
+          try {
+            setStatus(`Processando rosto... (tentativa ${attempts + 1}/${maxAttempts})`)
+            
+            fullDetection = await Promise.race([
+              faceapi
+                .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+                .withFaceLandmarks()
+                .withFaceDescriptor(),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout')), 8000)
+              )
+            ])
+            
+            if (fullDetection && fullDetection.descriptor) {
+              break // Sucesso, sair do loop
+            }
+          } catch (error) {
+            console.warn(`Tentativa ${attempts + 1} falhou:`, error.message)
+            attempts++
+            if (attempts < maxAttempts) {
+              await new Promise(resolve => setTimeout(resolve, 500)) // Aguardar antes de tentar novamente
+            }
+          }
+        }
+        
         if (!fullDetection || !fullDetection.descriptor) {
-          alert('Erro ao processar rosto. Tente novamente.')
+          console.error('Falha ao processar rosto após múltiplas tentativas')
+          alert('Erro ao processar rosto. Certifique-se de:\n- Estar bem iluminado\n- Olhar diretamente para a câmera\n- Não mover muito')
           setIsProcessing(false)
           setProgress(0)
           return
         }
 
-        setProgress(80)
+        setProgress(70)
+        setStatus('Convertendo dados...')
+        
         const descriptor = fullDetection.descriptor
+        
+        // Verificar se descriptor é válido
+        if (!descriptor || descriptor.length === 0) {
+          alert('Rosto não válido. Tente novamente.')
+          setIsProcessing(false)
+          setProgress(0)
+          return
+        }
+        
+        setProgress(80)
+        setStatus('Preparando para salvar...')
+        
         const embeddingBase64 = float32ToBase64(Array.from(descriptor))
 
         const isRegistering = !!pendingUser
