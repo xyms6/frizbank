@@ -23,12 +23,6 @@ function App() {
     const user = checkAuth()
     if (user) {
       setPage('dashboard')
-    } else {
-      // Verificar se há parâmetro na URL para acesso direto ao dashboard
-      const urlParams = new URLSearchParams(window.location.search)
-      if (urlParams.get('demo') === 'true' || urlParams.get('dashboard') === 'true') {
-        setPage('dashboard')
-      }
     }
   }, [])
 

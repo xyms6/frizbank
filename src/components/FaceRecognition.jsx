@@ -29,241 +29,149 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
     }
   }, [])
 
-  const startFaceRecognition = async () => {
-    // Sempre verificar e carregar modelos se necessário
-    setStatus('Verificando modelos...')
-    const loaded = await loadFaceModels()
-    if (!loaded) {
-      alert('Não foi possível carregar os modelos de reconhecimento facial. Verifique sua conexão com a internet e tente novamente.')
-      setStatus('Erro ao carregar modelos. Tente recarregar a página.')
-      setIsProcessing(false)
+  // Iniciar câmera
+  const startCamera = async () => {
+    if (!videoRef.current) return
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+      streamRef.current = stream
+      videoRef.current.srcObject = stream
+      setStatus('Câmera ativada. Clique em "Validar Rosto" para continuar.')
+    } catch (err) {
+      console.error('Erro na câmera:', err)
+      alert('Erro ao acessar a câmera. Verifique as permissões.')
+    }
+  }
+
+  // Validar rosto e salvar no backend
+  const validateFace = async () => {
+    if (!videoRef.current || !videoRef.current.srcObject) {
+      alert('Ligue a câmera primeiro!')
       return
     }
 
     setIsProcessing(true)
-    setStatus('Acessando câmera...')
-    setProgress(10)
+    setStatus('Carregando modelos...')
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 640, height: 480 } 
-      })
-      streamRef.current = stream
-      videoRef.current.srcObject = stream
-
-      // Aguardar o vídeo estar pronto
-      await new Promise((resolve) => {
-        if (videoRef.current.readyState >= 2) {
-          resolve()
-        } else {
-          videoRef.current.onloadedmetadata = () => resolve()
-        }
-      })
-
-      setStatus('Posicione seu rosto na frente da câmera...')
-      setProgress(30)
-
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      const isRegistering = !!pendingUser
-      const email = isRegistering ? pendingUser?.email : currentUser?.email
-
-      if (!email) {
-        setStatus('Erro: usuário não identificado para validação')
+      // Carregar modelos se necessário
+      const loaded = await loadFaceModels()
+      if (!loaded) {
+        alert('Erro ao carregar modelos faciais.')
         setIsProcessing(false)
-        stream.getTracks().forEach(track => track.stop())
         return
       }
 
-      if (isRegistering && (!pendingUser || !pendingUser.id)) {
-        setStatus('Erro: Dados de usuário incompletos')
-        setIsProcessing(false)
-        stream.getTracks().forEach(track => track.stop())
-        return
-      }
+      setStatus('Detectando rosto...')
 
-      let attempts = 0
-      const maxAttempts = 150
-      let faceDetected = false
+      // Detectar rosto
+      const detection = await faceapi.detectSingleFace(
+        videoRef.current, 
+        new faceapi.TinyFaceDetectorOptions()
+      )
 
-      const detectFace = async () => {
-        if (faceDetected) return // Evitar múltiplas detecções simultâneas
+      if (detection) {
+        setStatus('Rosto detectado! Salvando no servidor...')
         
-        if (attempts >= maxAttempts) {
-          setStatus('Tempo esgotado. Tente novamente.')
-          setProgress(0)
+        // Obter descriptor do rosto
+        const fullDetection = await faceapi
+          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor()
+
+        if (!fullDetection || !fullDetection.descriptor) {
+          alert('Erro ao processar rosto. Tente novamente.')
           setIsProcessing(false)
-          stream.getTracks().forEach(track => track.stop())
           return
         }
 
-        attempts++
-        setProgress(30 + Math.min((attempts / maxAttempts) * 50, 80))
+        const descriptor = fullDetection.descriptor
+        const embeddingBase64 = float32ToBase64(Array.from(descriptor))
+
+        const isRegistering = !!pendingUser
+        const userId = isRegistering ? pendingUser.id : currentUser?.id
+        const email = isRegistering ? pendingUser?.email : currentUser?.email
+
+        if (!userId || !email) {
+          alert('Erro: Dados de usuário não encontrados.')
+          setIsProcessing(false)
+          return
+        }
 
         try {
-          // Verificar se os modelos estão carregados antes de usar
-          if (!faceapi.nets.tinyFaceDetector.isLoaded) {
-            setStatus('Modelos ainda carregando...')
-            setTimeout(detectFace, 500)
-            return
-          }
+          if (isRegistering) {
+            // Salvar rosto no cadastro
+            const response = await fetch(`${API_BASE_URL}/users/${userId}/face`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ faceEmbedding: embeddingBase64 })
+            })
 
-          const detection = await faceapi
-            .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
-            .withFaceLandmarks()
-            .withFaceDescriptor()
-
-          if (detection) {
-            faceDetected = true
-            const descriptor = detection.descriptor
-            
-            // Validar qualidade do rosto detectado
-            const box = detection.detection.box
-            const faceSize = Math.max(box.width, box.height)
-            const minFaceSize = 80 // Tamanho mínimo do rosto
-            
-            if (faceSize < minFaceSize) {
-              faceDetected = false
-              setStatus('Aproxime-se mais da câmera...')
-              setTimeout(detectFace, 300)
-              return
+            if (!response.ok) {
+              const errorText = await response.text()
+              throw new Error(errorText || 'Erro ao salvar rosto')
             }
 
-            // Validar se o descriptor é válido
-            if (!descriptor || descriptor.length === 0) {
-              faceDetected = false
-              setStatus('Rosto não válido. Tente novamente...')
-              setTimeout(detectFace, 300)
-              return
-            }
+            const userUpdated = await response.json()
+            console.log('Rosto salvo com sucesso:', userUpdated)
             
-            if (isRegistering) {
-              setStatus('Validando e salvando rosto...')
-              setProgress(85)
-
-              // Converter descriptor para array de bytes (base64)
-              const embeddingBase64 = float32ToBase64(Array.from(descriptor))
-              
-              console.log('Enviando rosto para o servidor...', {
-                userId: pendingUser.id,
-                email: pendingUser.email,
-                embeddingLength: embeddingBase64.length
-              })
-              
-              try {
-                const response = await fetch(`${API_BASE_URL}/users/${pendingUser.id}/face`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ faceEmbedding: embeddingBase64 })
-                })
-
-                if (!response.ok) {
-                  const errorText = await response.text()
-                  console.error('Erro do backend:', response.status, errorText)
-                  throw new Error(errorText || `Erro ao salvar rosto (${response.status})`)
-                }
-
-                const userUpdated = await response.json()
-                console.log('Rosto salvo com sucesso:', userUpdated)
-                
-                setStatus('✅ Rosto cadastrado com sucesso!')
-                setProgress(100)
-                
-                setTimeout(() => {
-                  stream.getTracks().forEach(track => track.stop())
-                  login(userUpdated)
-                  onPageChange('dashboard')
-                }, 1500)
-              } catch (error) {
-                console.error('Erro ao registrar rosto:', error)
-                faceDetected = false
-                setStatus(`Erro: ${error.message}`)
-                setIsProcessing(false)
-                stream.getTracks().forEach(track => track.stop())
-                alert(`Erro ao salvar rosto: ${error.message}`)
+            setStatus('✅ Rosto cadastrado com sucesso!')
+            
+            setTimeout(() => {
+              if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop())
               }
-              return
-            } else {
-              // Verificar rosto (login)
-              if (!currentUser) {
-                setStatus('Erro: Usuário não encontrado')
-                setIsProcessing(false)
-                stream.getTracks().forEach(track => track.stop())
-                return
-              }
-
-              setStatus('Verificando rosto...')
-              setProgress(85)
-              
-              const embeddingBase64 = float32ToBase64(Array.from(descriptor))
-              
-              console.log('Verificando rosto no servidor...', { email })
-              
-              try {
-                const response = await fetch(`${API_BASE_URL}/users/verify-face`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ email, faceEmbedding: embeddingBase64 })
-                })
-
-                if (!response.ok) {
-                  faceDetected = false
-                  setStatus('Rosto não reconhecido. Tente novamente...')
-                  setTimeout(detectFace, 500)
-                  return
-                }
-
-                const verifiedUser = await response.json()
-                console.log('Rosto verificado com sucesso:', verifiedUser)
-                
-                setStatus('✅ Rosto reconhecido!')
-                setProgress(100)
-                
-                setTimeout(() => {
-                  stream.getTracks().forEach(track => track.stop())
-                  login(verifiedUser)
-                  onPageChange('dashboard')
-                }, 1500)
-              } catch (error) {
-                console.error('Erro ao verificar rosto:', error)
-                faceDetected = false
-                setStatus('Falha na verificação. Tente novamente...')
-                setTimeout(detectFace, 500)
-              }
-            }
+              login(userUpdated)
+              onPageChange('dashboard')
+            }, 1500)
           } else {
-            setStatus('Nenhum rosto detectado. Posicione-se melhor...')
-            setTimeout(detectFace, 300)
+            // Verificar rosto no login
+            const response = await fetch(`${API_BASE_URL}/users/verify-face`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, faceEmbedding: embeddingBase64 })
+            })
+
+            if (!response.ok) {
+              alert('Rosto não reconhecido. Tente novamente.')
+              setIsProcessing(false)
+              return
+            }
+
+            const verifiedUser = await response.json()
+            console.log('Rosto verificado com sucesso:', verifiedUser)
+            
+            setStatus('✅ Rosto reconhecido!')
+            
+            setTimeout(() => {
+              if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop())
+              }
+              login(verifiedUser)
+              onPageChange('dashboard')
+            }, 1500)
           }
         } catch (error) {
-          console.error('Erro na detecção:', error)
-          faceDetected = false
-          if (error.message && error.message.includes('TinyYolov2')) {
-            setStatus('Erro: Modelos não carregados. Recarregando...')
-            // Tentar recarregar modelos
-            const reloaded = await loadFaceModels()
-            if (reloaded) {
-              setTimeout(detectFace, 500)
-            } else {
-              setStatus('Erro ao carregar modelos. Recarregue a página.')
-              setIsProcessing(false)
-              stream.getTracks().forEach(track => track.stop())
-            }
-          } else {
-            setStatus('Erro na detecção. Tente novamente...')
-            setTimeout(detectFace, 500)
-          }
+          console.error('Erro ao salvar/verificar rosto:', error)
+          alert(`Erro: ${error.message}`)
+          setIsProcessing(false)
         }
+      } else {
+        alert('Nenhum rosto detectado. Tente novamente.')
+        setIsProcessing(false)
       }
-
-      detectFace()
-    } catch (error) {
-      console.error('Erro ao acessar câmera:', error)
-      alert('Erro ao acessar a câmera. Verifique as permissões.')
+    } catch (err) {
+      console.error('Erro na validação:', err)
+      alert('Erro na validação facial.')
       setIsProcessing(false)
-      setProgress(0)
     }
   }
+
+  // Carregar modelos ao montar
+  useEffect(() => {
+    loadFaceModels().catch(err => console.error('Erro ao carregar modelos:', err))
+  }, [])
 
   return (
     <div id="face-recognition-page" className="page active">
@@ -285,14 +193,22 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
               ></div>
             </div>
           </div>
-          <button
-            id="start-face-recognition"
-            className="btn-primary btn-full"
-            onClick={startFaceRecognition}
-            disabled={isProcessing}
-          >
-            {isProcessing ? 'Processando...' : 'Iniciar Reconhecimento'}
-          </button>
+          <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
+            <button
+              className="btn-primary btn-full"
+              onClick={startCamera}
+              disabled={isProcessing}
+            >
+              Ligar Câmera
+            </button>
+            <button
+              className="btn-primary btn-full"
+              onClick={validateFace}
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Processando...' : 'Validar Rosto'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

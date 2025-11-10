@@ -1,17 +1,4 @@
-import { useAuth } from '../hooks/useAuth'
-
 export default function Landing({ onPageChange }) {
-  const { login } = useAuth()
-
-  const handleDemo = () => {
-    const demoUser = {
-      name: 'Usuário Demo',
-      email: 'demo@frizbank.com'
-    }
-    login(demoUser)
-    onPageChange('dashboard')
-  }
-
   return (
     <div id="landing-page" className="page active">
       <nav className="navbar landing-navbar">
@@ -26,9 +13,6 @@ export default function Landing({ onPageChange }) {
             </button>
             <button className="btn-primary" onClick={() => onPageChange('register')}>
               Abra sua Conta
-            </button>
-            <button className="btn-demo" onClick={handleDemo} title="Acessar Dashboard Demo">
-              Demo
             </button>
           </div>
         </div>
