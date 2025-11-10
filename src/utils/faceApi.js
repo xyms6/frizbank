@@ -3,7 +3,11 @@ import * as faceapi from 'face-api.js'
 // Verificar se os modelos estão carregados
 export function areModelsLoaded() {
   try {
-    return faceapi.nets.tinyFaceDetector.isLoaded
+    return (
+      faceapi.nets.tinyFaceDetector.isLoaded &&
+      faceapi.nets.faceLandmark68Net.isLoaded &&
+      faceapi.nets.faceRecognitionNet.isLoaded
+    )
   } catch (error) {
     return false
   }
@@ -33,13 +37,21 @@ export async function loadFaceModels() {
     try {
       console.log(`Tentando carregar modelos de: ${source}`)
       
-      // Carregar TinyFaceDetector (mais leve e rápido)
-      await faceapi.nets.tinyFaceDetector.loadFromUri(source)
+      // Carregar TODOS os modelos necessários
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(source),
+        faceapi.nets.faceLandmark68Net.loadFromUri(source),
+        faceapi.nets.faceRecognitionNet.loadFromUri(source)
+      ])
+      
+      console.log('✅ Todos os modelos carregados!')
       
       // Verificar se carregou
       if (areModelsLoaded()) {
         console.log(`✅ Modelos carregados com sucesso de: ${source}`)
         return true
+      } else {
+        throw new Error('Modelos não foram carregados corretamente')
       }
     } catch (error) {
       console.warn(`Falha ao carregar de ${source}:`, error.message)
@@ -51,8 +63,14 @@ export async function loadFaceModels() {
   // Se nenhuma fonte funcionou, tentar uma última vez com timeout maior
   try {
     console.log('Tentativa final com CDN principal...')
+    const finalSource = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'
+    
     await Promise.race([
-      faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights'),
+      Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(finalSource),
+        faceapi.nets.faceLandmark68Net.loadFromUri(finalSource),
+        faceapi.nets.faceRecognitionNet.loadFromUri(finalSource)
+      ]),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 30000))
     ])
     

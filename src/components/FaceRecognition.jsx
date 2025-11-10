@@ -83,22 +83,36 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
 
     setIsProcessing(true)
     setStatus('Carregando modelos... Aguarde...')
-    setProgress(20)
+    setProgress(10)
 
     try {
-      // Carregar modelos se necessário
-      const loaded = await loadFaceModels()
-      if (!loaded) {
-        setStatus('Tentando carregar modelos novamente...')
-        // Tentar mais uma vez
-        const retry = await loadFaceModels()
-        if (!retry) {
+      // Verificar e carregar TODOS os modelos necessários
+      if (!faceapi.nets.tinyFaceDetector.isLoaded || 
+          !faceapi.nets.faceLandmark68Net.isLoaded || 
+          !faceapi.nets.faceRecognitionNet.isLoaded) {
+        setStatus('Carregando modelos faciais...')
+        setProgress(20)
+        
+        const loaded = await loadFaceModels()
+        if (!loaded) {
           alert('Erro ao carregar modelos. Verifique sua conexão com a internet e tente novamente.')
           setIsProcessing(false)
           setProgress(0)
           return
         }
       }
+      
+      // Verificar novamente se todos estão carregados
+      if (!faceapi.nets.tinyFaceDetector.isLoaded || 
+          !faceapi.nets.faceLandmark68Net.isLoaded || 
+          !faceapi.nets.faceRecognitionNet.isLoaded) {
+        alert('Modelos não carregados corretamente. Recarregue a página.')
+        setIsProcessing(false)
+        setProgress(0)
+        return
+      }
+      
+      console.log('✅ Todos os modelos estão carregados!')
 
       setProgress(40)
       setStatus('Detectando rosto... Posicione-se bem na frente da câmera')
@@ -125,62 +139,48 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
         setProgress(60)
         setStatus('Processando rosto...')
         
-        // Obter descriptor do rosto com timeout e retry
-        let fullDetection
-        let attempts = 0
-        const maxAttempts = 3
+        // Obter descriptor do rosto - os modelos já estão carregados
+        let fullDetection = null
         
-        while (attempts < maxAttempts && !fullDetection) {
-          try {
-            setStatus(`Processando rosto... (tentativa ${attempts + 1}/${maxAttempts})`)
-            
-            fullDetection = await Promise.race([
-              faceapi
-                .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
-                .withFaceLandmarks()
-                .withFaceDescriptor(),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Timeout')), 8000)
-              )
-            ])
-            
-            if (fullDetection && fullDetection.descriptor) {
-              break // Sucesso, sair do loop
-            }
-          } catch (error) {
-            console.warn(`Tentativa ${attempts + 1} falhou:`, error.message)
-            attempts++
-            if (attempts < maxAttempts) {
-              await new Promise(resolve => setTimeout(resolve, 500)) // Aguardar antes de tentar novamente
-            }
-          }
-        }
-        
-        if (!fullDetection || !fullDetection.descriptor) {
-          console.error('Falha ao processar rosto após múltiplas tentativas')
-          alert('Erro ao processar rosto. Certifique-se de:\n- Estar bem iluminado\n- Olhar diretamente para a câmera\n- Não mover muito')
+        try {
+          fullDetection = await faceapi
+            .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({
+              inputSize: 320,
+              scoreThreshold: 0.3
+            }))
+            .withFaceLandmarks()
+            .withFaceDescriptor()
+          
+          console.log('✅ Descriptor obtido! Tamanho:', fullDetection?.descriptor?.length || 0)
+          
+        } catch (error) {
+          console.error('❌ Erro ao processar descriptor:', error)
+          alert('Erro ao processar rosto. Tente novamente.')
           setIsProcessing(false)
           setProgress(0)
           return
         }
+        
+        if (!fullDetection || !fullDetection.descriptor || fullDetection.descriptor.length === 0) {
+          console.error('❌ Descriptor inválido ou vazio')
+          alert('Não foi possível processar o rosto. Tente:\n- Melhorar a iluminação\n- Olhar diretamente para a câmera\n- Ficar mais próximo da câmera')
+          setIsProcessing(false)
+          setProgress(0)
+          return
+        }
+        
+        console.log('✅ Descriptor válido! Prosseguindo...')
 
-        setProgress(70)
+        setProgress(75)
         setStatus('Convertendo dados...')
         
         const descriptor = fullDetection.descriptor
+        const embeddingBase64 = float32ToBase64(Array.from(descriptor))
         
-        // Verificar se descriptor é válido
-        if (!descriptor || descriptor.length === 0) {
-          alert('Rosto não válido. Tente novamente.')
-          setIsProcessing(false)
-          setProgress(0)
-          return
-        }
+        console.log('✅ Dados convertidos! Tamanho base64:', embeddingBase64.length)
         
         setProgress(80)
         setStatus('Preparando para salvar...')
-        
-        const embeddingBase64 = float32ToBase64(Array.from(descriptor))
 
         const isRegistering = !!pendingUser
         const userId = isRegistering ? pendingUser.id : currentUser?.id
