@@ -7,6 +7,7 @@ import { requestLocationAndGetCurrency, getExchangeRate, formatCurrency } from '
 export default function Dashboard({ onPageChange, currentUser }) {
   const { logout } = useAuth()
   const [view, setView] = useState('home')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [user, setUser] = useState(currentUser || null)
   const [account, setAccount] = useState(null)
   const [saldo, setSaldo] = useState('0.00')
@@ -186,16 +187,17 @@ export default function Dashboard({ onPageChange, currentUser }) {
   return (
     <div id="dashboard-page" className="page active">
       <div className="dashboard-layout">
-        <aside className="sidebar">
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="sidebar-header">
             <div className="logo-sidebar">
               <img src="/assets/Design sem nome.jpg" alt="FrizBank" className="sidebar-logo-img" />
               <span>FrizBank</span>
             </div>
+            <button className="sidebar-close" onClick={() => setSidebarOpen(false)}>×</button>
           </div>
           <nav className="sidebar-nav">
-            <a href="#" className={`nav-item ${view === 'home' ? 'active' : ''}`} onClick={e => {e.preventDefault();setView('home')}}><span>Home</span></a>
-            <a href="#" className={`nav-item ${view === 'account' ? 'active' : ''}`} onClick={e => {e.preventDefault();setView('account')}}><span>Conta</span></a>
+            <a href="#" className={`nav-item ${view === 'home' ? 'active' : ''}`} onClick={e => {e.preventDefault();setView('home'); setSidebarOpen(false)}}><span>Home</span></a>
+            <a href="#" className={`nav-item ${view === 'account' ? 'active' : ''}`} onClick={e => {e.preventDefault();setView('account'); setSidebarOpen(false)}}><span>Conta</span></a>
           </nav>
           <div className="sidebar-footer">
             <div className="theme-toggle-container">
@@ -210,8 +212,14 @@ export default function Dashboard({ onPageChange, currentUser }) {
             <a href="#" className="nav-item" onClick={e => {e.preventDefault();handleLogout();}}><span>Sair</span></a>
           </div>
         </aside>
+        <div className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`} onClick={() => setSidebarOpen(false)}></div>
         <main className="dashboard-main">
           <header className="dashboard-header">
+            <button className="hamburger-menu dashboard-menu" onClick={() => setSidebarOpen(true)} aria-label="Menu">
+              <span></span>
+              <span></span>
+              <span></span>
+            </button>
             <div className="header-left">
               <h2>Olá, <span>{user?.name || 'Usuário'}</span></h2>
               <p className="welcome-text">Bem-vindo de volta!</p>

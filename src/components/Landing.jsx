@@ -1,4 +1,8 @@
+import { useState } from 'react'
+
 export default function Landing({ onPageChange }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+
   return (
     <div id="landing-page" className="page active">
       <nav className="navbar landing-navbar">
@@ -15,6 +19,23 @@ export default function Landing({ onPageChange }) {
               Abra sua Conta
             </button>
           </div>
+          <button 
+            className="hamburger-menu"
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label="Menu"
+          >
+            <span className={menuOpen ? 'active' : ''}></span>
+            <span className={menuOpen ? 'active' : ''}></span>
+            <span className={menuOpen ? 'active' : ''}></span>
+          </button>
+        </div>
+        <div className={`mobile-menu ${menuOpen ? 'open' : ''}`}>
+          <button className="btn-secondary btn-full" onClick={() => { onPageChange('login'); setMenuOpen(false); }}>
+            Entrar
+          </button>
+          <button className="btn-primary btn-full" onClick={() => { onPageChange('register'); setMenuOpen(false); }}>
+            Abra sua Conta
+          </button>
         </div>
       </nav>
       

@@ -13,9 +13,10 @@ const float32ToBase64 = (descriptor) => {
 
 export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUser }) {
   const { login, currentUser } = useAuth()
-  const [status, setStatus] = useState('Inicializando câmera...')
+  const [status, setStatus] = useState('Clique no botão para ligar a câmera')
   const [progress, setProgress] = useState(0)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [cameraActive, setCameraActive] = useState(false)
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
@@ -33,46 +34,90 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
   const startCamera = async () => {
     if (!videoRef.current) return
 
+    if (cameraActive) {
+      // Se câmera já está ativa, validar rosto
+      validateFace()
+      return
+    }
+
+    setIsProcessing(true)
+    setStatus('Acessando câmera...')
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user'
+        } 
+      })
       streamRef.current = stream
       videoRef.current.srcObject = stream
-      setStatus('Câmera ativada. Clique em "Validar Rosto" para continuar.')
+      
+      // Aguardar vídeo estar pronto
+      await new Promise((resolve) => {
+        if (videoRef.current.readyState >= 2) {
+          resolve()
+        } else {
+          videoRef.current.onloadedmetadata = () => resolve()
+        }
+      })
+
+      setCameraActive(true)
+      setStatus('Câmera ativada! Posicione seu rosto e clique em "Validar Rosto"')
+      setIsProcessing(false)
     } catch (err) {
       console.error('Erro na câmera:', err)
+      setStatus('Erro ao acessar a câmera')
       alert('Erro ao acessar a câmera. Verifique as permissões.')
+      setIsProcessing(false)
     }
   }
 
   // Validar rosto e salvar no backend
   const validateFace = async () => {
-    if (!videoRef.current || !videoRef.current.srcObject) {
+    if (!videoRef.current || !videoRef.current.srcObject || !cameraActive) {
       alert('Ligue a câmera primeiro!')
       return
     }
 
     setIsProcessing(true)
-    setStatus('Carregando modelos...')
+    setStatus('Carregando modelos... Aguarde...')
+    setProgress(20)
 
     try {
       // Carregar modelos se necessário
       const loaded = await loadFaceModels()
       if (!loaded) {
-        alert('Erro ao carregar modelos faciais.')
-        setIsProcessing(false)
-        return
+        setStatus('Tentando carregar modelos novamente...')
+        // Tentar mais uma vez
+        const retry = await loadFaceModels()
+        if (!retry) {
+          alert('Erro ao carregar modelos. Verifique sua conexão com a internet e tente novamente.')
+          setIsProcessing(false)
+          setProgress(0)
+          return
+        }
       }
 
-      setStatus('Detectando rosto...')
+      setProgress(40)
+      setStatus('Detectando rosto... Posicione-se bem na frente da câmera')
 
-      // Detectar rosto
+      // Aguardar um pouco para garantir que o vídeo está pronto
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Detectar rosto com opções mais permissivas
       const detection = await faceapi.detectSingleFace(
         videoRef.current, 
-        new faceapi.TinyFaceDetectorOptions()
+        new faceapi.TinyFaceDetectorOptions({ 
+          inputSize: 320,  // Tamanho menor = mais rápido
+          scoreThreshold: 0.3  // Threshold mais baixo = detecta mais facilmente
+        })
       )
 
       if (detection) {
-        setStatus('Rosto detectado! Salvando no servidor...')
+        setProgress(60)
+        setStatus('Rosto detectado! Processando...')
         
         // Obter descriptor do rosto
         const fullDetection = await faceapi
@@ -83,9 +128,11 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
         if (!fullDetection || !fullDetection.descriptor) {
           alert('Erro ao processar rosto. Tente novamente.')
           setIsProcessing(false)
+          setProgress(0)
           return
         }
 
+        setProgress(80)
         const descriptor = fullDetection.descriptor
         const embeddingBase64 = float32ToBase64(Array.from(descriptor))
 
@@ -96,10 +143,13 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
         if (!userId || !email) {
           alert('Erro: Dados de usuário não encontrados.')
           setIsProcessing(false)
+          setProgress(0)
           return
         }
 
         try {
+          setStatus('Salvando no servidor...')
+          
           if (isRegistering) {
             // Salvar rosto no cadastro
             const response = await fetch(`${API_BASE_URL}/users/${userId}/face`, {
@@ -110,12 +160,14 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
 
             if (!response.ok) {
               const errorText = await response.text()
-              throw new Error(errorText || 'Erro ao salvar rosto')
+              console.error('Erro do servidor:', errorText)
+              throw new Error(errorText || 'Erro ao salvar rosto no servidor')
             }
 
             const userUpdated = await response.json()
-            console.log('Rosto salvo com sucesso:', userUpdated)
+            console.log('✅ Rosto salvo com sucesso:', userUpdated)
             
+            setProgress(100)
             setStatus('✅ Rosto cadastrado com sucesso!')
             
             setTimeout(() => {
@@ -136,12 +188,14 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
             if (!response.ok) {
               alert('Rosto não reconhecido. Tente novamente.')
               setIsProcessing(false)
+              setProgress(0)
               return
             }
 
             const verifiedUser = await response.json()
-            console.log('Rosto verificado com sucesso:', verifiedUser)
+            console.log('✅ Rosto verificado com sucesso:', verifiedUser)
             
+            setProgress(100)
             setStatus('✅ Rosto reconhecido!')
             
             setTimeout(() => {
@@ -154,17 +208,20 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
           }
         } catch (error) {
           console.error('Erro ao salvar/verificar rosto:', error)
-          alert(`Erro: ${error.message}`)
+          alert(`Erro: ${error.message || 'Erro ao comunicar com o servidor'}`)
           setIsProcessing(false)
+          setProgress(0)
         }
       } else {
-        alert('Nenhum rosto detectado. Tente novamente.')
+        alert('Nenhum rosto detectado. Certifique-se de:\n- Estar em um local bem iluminado\n- Olhar diretamente para a câmera\n- Estar a uma distância adequada')
         setIsProcessing(false)
+        setProgress(0)
       }
     } catch (err) {
       console.error('Erro na validação:', err)
-      alert('Erro na validação facial.')
+      alert(`Erro na validação facial: ${err.message || 'Erro desconhecido'}`)
       setIsProcessing(false)
+      setProgress(0)
     }
   }
 
@@ -193,22 +250,18 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
               ></div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px', flexDirection: 'column' }}>
-            <button
-              className="btn-primary btn-full"
-              onClick={startCamera}
-              disabled={isProcessing}
-            >
-              Ligar Câmera
-            </button>
-            <button
-              className="btn-primary btn-full"
-              onClick={validateFace}
-              disabled={isProcessing}
-            >
-              {isProcessing ? 'Processando...' : 'Validar Rosto'}
-            </button>
-          </div>
+          <button
+            className="btn-primary btn-full"
+            onClick={startCamera}
+            disabled={isProcessing}
+          >
+            {isProcessing 
+              ? 'Processando...' 
+              : cameraActive 
+                ? 'Validar Rosto' 
+                : 'Ligar Câmera'
+            }
+          </button>
         </div>
       </div>
     </div>
