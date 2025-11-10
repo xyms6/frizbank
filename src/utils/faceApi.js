@@ -15,8 +15,31 @@ export async function waitForFaceAPI() {
   return true
 }
 
+// Verificar se os modelos estão carregados
+export function areModelsLoaded() {
+  if (typeof faceapi === 'undefined') {
+    return false
+  }
+  
+  try {
+    return (
+      faceapi.nets.tinyFaceDetector.isLoaded &&
+      faceapi.nets.faceLandmark68Net.isLoaded &&
+      faceapi.nets.faceRecognitionNet.isLoaded
+    )
+  } catch (error) {
+    return false
+  }
+}
+
 // Carregar modelos do Face API
 export async function loadFaceModels() {
+  // Verificar se já estão carregados
+  if (areModelsLoaded()) {
+    console.log('✅ Modelos já estão carregados')
+    return true
+  }
+
   // Aguardar Face API estar disponível
   try {
     await waitForFaceAPI()
@@ -43,15 +66,23 @@ export async function loadFaceModels() {
     try {
       console.log(`Tentando carregar modelos de: ${modelPaths[i]}`)
       
-      // Carregar modelos em paralelo para ser mais rápido
-      await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(modelPaths[i]),
-        faceapi.nets.faceLandmark68Net.loadFromUri(modelPaths[i]),
-        faceapi.nets.faceRecognitionNet.loadFromUri(modelPaths[i])
-      ])
+      // Carregar modelos em sequência para evitar conflitos
+      await faceapi.nets.tinyFaceDetector.loadFromUri(modelPaths[i])
+      console.log('✅ TinyFaceDetector carregado')
       
-      loaded = true
-      console.log(`✅ Modelos carregados com sucesso de: ${modelPaths[i]}`)
+      await faceapi.nets.faceLandmark68Net.loadFromUri(modelPaths[i])
+      console.log('✅ FaceLandmark68Net carregado')
+      
+      await faceapi.nets.faceRecognitionNet.loadFromUri(modelPaths[i])
+      console.log('✅ FaceRecognitionNet carregado')
+      
+      // Verificar se realmente foram carregados
+      if (areModelsLoaded()) {
+        loaded = true
+        console.log(`✅ Todos os modelos carregados com sucesso de: ${modelPaths[i]}`)
+      } else {
+        throw new Error('Modelos não foram carregados corretamente')
+      }
     } catch (error) {
       console.warn(`Falha ao carregar de ${modelPaths[i]}:`, error.message)
       // Continuar para o próximo CDN
