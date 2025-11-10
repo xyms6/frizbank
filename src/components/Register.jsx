@@ -24,12 +24,31 @@ export default function Register({ onPageChange, onRegisteredUser }) {
     setError('')
     setLoading(true)
 
-    // SEGURA o usuário em pendingUser, não cria ainda!
-    if (typeof onRegisteredUser === 'function') {
-      onRegisteredUser({ name, email, password })
+    try {
+      const response = await fetch(`${API_BASE_URL}/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      })
+
+      if (!response.ok) {
+        const errorMessage = await response.text()
+        throw new Error(errorMessage || 'Erro ao criar conta')
+      }
+
+      const createdUser = await response.json()
+
+      if (typeof onRegisteredUser === 'function') {
+        onRegisteredUser({ ...createdUser, password })
+      }
+
+      onPageChange('face-recognition')
+    } catch (apiError) {
+      console.error('Erro no cadastro:', apiError)
+      setError('Não foi possível criar sua conta. Verifique os dados e tente novamente.')
+    } finally {
+      setLoading(false)
     }
-    onPageChange('face-recognition')
-    setLoading(false)
   }
 
   return (
