@@ -182,16 +182,27 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
         setProgress(80)
         setStatus('Preparando para salvar...')
 
-        const isRegistering = !!pendingUser
-        const userId = isRegistering ? pendingUser.id : currentUser?.id
-        const email = isRegistering ? pendingUser?.email : currentUser?.email
+        // Usar pendingUser se existir (vem do login ou registro), senão usar currentUser
+        // Priorizar pendingUser porque ele é mais confiável (vem diretamente do login/registro)
+        const userToUse = pendingUser || currentUser
+        const userId = userToUse?.id
+        const email = userToUse?.email
+        // Só é registro se tem pendingUser mas não tem currentUser (usuário novo)
+        const isRegistering = !!pendingUser && !currentUser
 
         if (!userId || !email) {
-          alert('Erro: Dados de usuário não encontrados.')
+          console.error('Dados do usuário não encontrados:', { 
+            pendingUser: pendingUser ? { id: pendingUser.id, email: pendingUser.email } : null,
+            currentUser: currentUser ? { id: currentUser.id, email: currentUser.email } : null,
+            userToUse: userToUse ? { id: userToUse.id, email: userToUse.email } : null
+          })
+          alert('Erro: Dados de usuário não encontrados. Por favor, faça login novamente.')
           setIsProcessing(false)
           setProgress(0)
           return
         }
+        
+        console.log('✅ Usando dados do usuário:', { userId, email, isRegistering, hasPendingUser: !!pendingUser, hasCurrentUser: !!currentUser })
 
         try {
           setStatus('Salvando no servidor...')

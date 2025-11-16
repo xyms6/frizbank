@@ -26,6 +26,11 @@ function App() {
     setPendingUser(userData)
   }
 
+  const handleLoginUser = (userData) => {
+    // Quando faz login, também salva como pendingUser para o face-recognition
+    setPendingUser(userData)
+  }
+
   const handlePageChange = (newPage) => {
     // Proteção de rotas: dashboard só acessível se estiver logado
     if (newPage === 'dashboard' && !currentUser) {
@@ -34,8 +39,9 @@ function App() {
     }
     
     setPage(newPage)
-    if (newPage !== 'face-recognition') {
-      setPendingUser(null) // Limpa após cadastro biométrico
+    // Limpa pendingUser apenas quando sair da face-recognition (não quando entrar)
+    if (newPage === 'dashboard' || newPage === 'landing' || newPage === 'login' || newPage === 'register') {
+      setPendingUser(null)
     }
   }
 
@@ -49,7 +55,7 @@ function App() {
   return (
     <>
       {page === 'landing' && <Landing onPageChange={handlePageChange} />}
-      {page === 'login' && <Login onPageChange={handlePageChange} />}
+      {page === 'login' && <Login onPageChange={handlePageChange} onLoginUser={handleLoginUser} />}
       {page === 'register' && (
         <Register 
           onPageChange={handlePageChange}

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { API_BASE_URL } from '../config/api'
 
-export default function Login({ onPageChange }) {
+export default function Login({ onPageChange, onLoginUser }) {
   const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,7 +32,14 @@ export default function Login({ onPageChange }) {
         return
       }
 
+      // Salvar usuário no auth e passar para face-recognition
       login(user)
+      
+      // Passar usuário para o App.jsx via callback (se existir)
+      if (typeof onLoginUser === 'function') {
+        onLoginUser(user)
+      }
+      
       onPageChange('face-recognition')
     } catch (error) {
       alert('Erro ao fazer login. Tente novamente.')
