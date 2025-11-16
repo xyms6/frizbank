@@ -213,7 +213,16 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
             setStatus('Enviando para o servidor...')
             
             console.log('Enviando rosto para:', `${API_BASE_URL}/users/${userId}/face`)
-            console.log('Tamanho do embedding:', embeddingBase64.length)
+            console.log('Tamanho do embedding base64:', embeddingBase64.length)
+            console.log('User ID:', userId)
+            
+            if (!userId) {
+              throw new Error('ID do usuário não encontrado. Por favor, faça o registro novamente.')
+            }
+            
+            if (!embeddingBase64 || embeddingBase64.length === 0) {
+              throw new Error('Embedding facial vazio. Tente capturar o rosto novamente.')
+            }
             
             const response = await fetch(`${API_BASE_URL}/users/${userId}/face`, {
               method: 'POST',
@@ -223,7 +232,11 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
 
             if (!response.ok) {
               const errorText = await response.text()
-              console.error('Erro do servidor:', response.status, errorText)
+              console.error('Erro do servidor:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorText
+              })
               
               let errorMessage = 'Erro ao salvar rosto no servidor'
               if (errorText) {
@@ -233,6 +246,15 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
                 } catch {
                   errorMessage = errorText
                 }
+              }
+              
+              // Mensagens mais específicas baseadas no status
+              if (response.status === 401 || response.status === 403) {
+                errorMessage = 'Acesso negado. Por favor, faça o registro novamente.'
+              } else if (response.status === 404) {
+                errorMessage = 'Usuário não encontrado. Por favor, faça o registro novamente.'
+              } else if (response.status === 400) {
+                errorMessage = errorMessage || 'Dados inválidos. Tente capturar o rosto novamente.'
               }
               
               throw new Error(errorMessage)
