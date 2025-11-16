@@ -8,7 +8,7 @@ import { useAuth } from './hooks/useAuth'
 import { loadFaceModels } from './utils/faceApi'
 
 function App() {
-  const { currentUser } = useAuth()
+  const { currentUser, checkAuth } = useAuth()
   const [page, setPage] = useState('landing')
   const [modelsLoaded, setModelsLoaded] = useState(false)
   const [pendingUser, setPendingUser] = useState(null)
@@ -32,25 +32,38 @@ function App() {
   }
 
   const handlePageChange = (newPage) => {
-    // Proteção de rotas: dashboard só acessível se estiver logado
-    if (newPage === 'dashboard' && !currentUser) {
-      setPage('landing')
+    // Se está tentando ir para dashboard, verificar se tem usuário logado
+    if (newPage === 'dashboard') {
+      // Verificar se tem usuário logado (pode ter sido atualizado recentemente)
+      const user = checkAuth()
+      if (!user && !currentUser) {
+        // Se não tem usuário, redirecionar para landing
+        setPage('landing')
+        return
+      }
+      // Se tem usuário, permitir ir para dashboard
+      setPage('dashboard')
+      // Limpar pendingUser ao entrar no dashboard
+      setPendingUser(null)
       return
     }
     
     setPage(newPage)
     // Limpa pendingUser apenas quando sair da face-recognition (não quando entrar)
-    if (newPage === 'dashboard' || newPage === 'landing' || newPage === 'login' || newPage === 'register') {
+    if (newPage === 'landing' || newPage === 'login' || newPage === 'register') {
       setPendingUser(null)
     }
   }
 
   // Proteção: se estiver no dashboard e deslogar, volta para landing
   useEffect(() => {
-    if (page === 'dashboard' && !currentUser) {
-      setPage('landing')
+    if (page === 'dashboard') {
+      const user = currentUser || checkAuth()
+      if (!user) {
+        setPage('landing')
+      }
     }
-  }, [currentUser, page])
+  }, [currentUser, page, checkAuth])
 
   return (
     <>
@@ -69,12 +82,16 @@ function App() {
           pendingUser={pendingUser}
         />
       )}
-      {page === 'dashboard' && currentUser && (
-        <Dashboard 
-          onPageChange={handlePageChange}
-          currentUser={currentUser}
-        />
-      )}
+      {page === 'dashboard' && (() => {
+        // Verificar se tem usuário logado (pode estar no estado ou no checkAuth)
+        const user = currentUser || checkAuth()
+        return user ? (
+          <Dashboard 
+            onPageChange={handlePageChange}
+            currentUser={user}
+          />
+        ) : null
+      })()}
     </>
   )
 }

@@ -266,11 +266,14 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
             setProgress(100)
             setStatus('✅ Rosto cadastrado com sucesso!')
             
+            // Fazer login primeiro
+            login(userUpdated)
+            
             setTimeout(() => {
               if (streamRef.current) {
                 streamRef.current.getTracks().forEach(track => track.stop())
               }
-              login(userUpdated)
+              // Redirecionar para dashboard - o login já foi feito
               onPageChange('dashboard')
             }, 1500)
           } else {
@@ -294,11 +297,14 @@ export default function FaceRecognition({ onPageChange, modelsLoaded, pendingUse
             setProgress(100)
             setStatus('✅ Rosto reconhecido!')
             
+            // Fazer login primeiro
+            login(verifiedUser)
+            
             setTimeout(() => {
               if (streamRef.current) {
                 streamRef.current.getTracks().forEach(track => track.stop())
               }
-              login(verifiedUser)
+              // Redirecionar para dashboard - o login já foi feito
               onPageChange('dashboard')
             }, 1500)
           }
