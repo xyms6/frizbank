@@ -36,36 +36,21 @@ export default function Dashboard({ onPageChange, currentUser }) {
   useEffect(() => {
     if (user && user.id) {
       setLoadingConta(true)
-      // Buscar todas as contas e encontrar a do usuário (ou criar se não existir)
-      fetch(`${API_BASE_URL}/contas`)
-        .then(res => res.json())
-        .then(contas => {
-          // Tentar encontrar conta do usuário (assumindo que há relação userId na conta)
-          const userConta = contas.find(c => c.userId === user.id) || contas[0]
-          if (userConta) {
-            setAccount(userConta)
-            setContaId(userConta.id)
-            setSaldo(userConta.saldo)
-            setExtrato(userConta.extrato ? userConta.extrato.split(';').filter(Boolean) : [])
-          } else {
-            // Se não encontrar, criar conta
-            return fetch(`${API_BASE_URL}/contas`, {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({saldo: '0.00', ganhos: '0.00', extrato: ''})
-            }).then(res => res.json())
-          }
+      // Buscar conta do usuário pelo endpoint específico
+      fetch(`${API_BASE_URL}/contas/usuario/${user.id}`)
+        .then(res => {
+          if (!res.ok) throw new Error('Erro ao buscar conta')
+          return res.json()
         })
         .then(data => {
-          if (data) {
-            setAccount(data)
-            setContaId(data.id)
-            setSaldo(data.saldo)
-            setExtrato(data.extrato ? data.extrato.split(';').filter(Boolean) : [])
-          }
+          setAccount(data)
+          setContaId(data.id)
+          setSaldo(data.saldo)
+          setExtrato(data.extrato ? data.extrato.split(';').filter(Boolean) : [])
         })
-        .catch(() => {
-          // Se falhar, criar conta
+        .catch(error => {
+          console.error('Erro ao buscar conta:', error)
+          // Se falhar, tentar criar conta
           fetch(`${API_BASE_URL}/contas`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -78,6 +63,7 @@ export default function Dashboard({ onPageChange, currentUser }) {
             setSaldo(data.saldo)
             setExtrato([])
           })
+          .catch(err => console.error('Erro ao criar conta:', err))
         })
         .finally(() => setLoadingConta(false))
     }
