@@ -36,16 +36,36 @@ export default function Dashboard({ onPageChange, currentUser }) {
   useEffect(() => {
     if (user && user.id) {
       setLoadingConta(true)
-      fetch(`${API_BASE_URL}/contas/usuario/${user.id}`)
+      // Buscar todas as contas e encontrar a do usuário (ou criar se não existir)
+      fetch(`${API_BASE_URL}/contas`)
         .then(res => res.json())
+        .then(contas => {
+          // Tentar encontrar conta do usuário (assumindo que há relação userId na conta)
+          const userConta = contas.find(c => c.userId === user.id) || contas[0]
+          if (userConta) {
+            setAccount(userConta)
+            setContaId(userConta.id)
+            setSaldo(userConta.saldo)
+            setExtrato(userConta.extrato ? userConta.extrato.split(';').filter(Boolean) : [])
+          } else {
+            // Se não encontrar, criar conta
+            return fetch(`${API_BASE_URL}/contas`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({saldo: '0.00', ganhos: '0.00', extrato: ''})
+            }).then(res => res.json())
+          }
+        })
         .then(data => {
-          setAccount(data)
-          setContaId(data.id)
-          setSaldo(data.saldo)
-          setExtrato(data.extrato ? data.extrato.split(';').filter(Boolean) : [])
+          if (data) {
+            setAccount(data)
+            setContaId(data.id)
+            setSaldo(data.saldo)
+            setExtrato(data.extrato ? data.extrato.split(';').filter(Boolean) : [])
+          }
         })
         .catch(() => {
-          // Se não encontrar, criar conta
+          // Se falhar, criar conta
           fetch(`${API_BASE_URL}/contas`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -102,7 +122,7 @@ export default function Dashboard({ onPageChange, currentUser }) {
     }
     setAddSaldoLoading(true)
     setAddSaldoMsg('')
-    fetch(`${API_BASE_URL}/contas/${contaId}/adicionar-saldo?valor=${addSaldoValor}`, { method: 'POST' })
+    fetch(`${API_BASE_URL}/contas/adicionar-saldo/${contaId}?valor=${addSaldoValor}`, { method: 'POST' })
       .then(res => {
         if (!res.ok) throw new Error('Erro ao adicionar saldo')
         return res.json()
@@ -141,7 +161,7 @@ export default function Dashboard({ onPageChange, currentUser }) {
     }
     setEnvioLoading(true)
     setEnvioMsg('')
-    fetch(`${API_BASE_URL}/contas/${contaId}/enviar?idDestino=${envioDestino}&valor=${envioValor}`, {method: 'POST'})
+    fetch(`${API_BASE_URL}/contas/enviar/${contaId}?idDestino=${envioDestino}&valor=${envioValor}`, {method: 'POST'})
       .then(res => {
         if (!res.ok) throw new Error('Erro ao enviar valor')
         return res.text()

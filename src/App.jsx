@@ -8,7 +8,7 @@ import { useAuth } from './hooks/useAuth'
 import { loadFaceModels } from './utils/faceApi'
 
 function App() {
-  const { currentUser, checkAuth } = useAuth()
+  const { currentUser } = useAuth()
   const [page, setPage] = useState('landing')
   const [modelsLoaded, setModelsLoaded] = useState(false)
   const [pendingUser, setPendingUser] = useState(null)
@@ -19,11 +19,7 @@ function App() {
       .then(() => setModelsLoaded(true))
       .catch(error => console.error('Erro ao carregar modelos:', error))
     
-    // Verificar autenticação
-    const user = checkAuth()
-    if (user) {
-      setPage('dashboard')
-    }
+    // Sempre começar na landing, não redirecionar automaticamente
   }, [])
 
   const handleRegisteredUser = (userData) => {
@@ -31,11 +27,24 @@ function App() {
   }
 
   const handlePageChange = (newPage) => {
+    // Proteção de rotas: dashboard só acessível se estiver logado
+    if (newPage === 'dashboard' && !currentUser) {
+      setPage('landing')
+      return
+    }
+    
     setPage(newPage)
     if (newPage !== 'face-recognition') {
       setPendingUser(null) // Limpa após cadastro biométrico
     }
   }
+
+  // Proteção: se estiver no dashboard e deslogar, volta para landing
+  useEffect(() => {
+    if (page === 'dashboard' && !currentUser) {
+      setPage('landing')
+    }
+  }, [currentUser, page])
 
   return (
     <>
@@ -54,7 +63,7 @@ function App() {
           pendingUser={pendingUser}
         />
       )}
-      {page === 'dashboard' && (
+      {page === 'dashboard' && currentUser && (
         <Dashboard 
           onPageChange={handlePageChange}
           currentUser={currentUser}
