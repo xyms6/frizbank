@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+  <!-- Favicon atualizado para usar a logo da aplicação -->
+  <link rel="icon" type="image/jpeg" href="/assets/Logo.jpg" />
+  <link rel="shortcut icon" type="image/jpeg" href="/assets/Logo.jpg" />
+  <!-- Opcional: ícones para dispositivos Apple -->
+  <link rel="apple-touch-icon" href="/assets/Logo.jpg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FrizBank - Carteira de Criptomoedas</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Acessibilidade: VLibras Widget -->
+    <div vw class="enabled">
+      <div vw-access-button class="active"></div>
+      <div vw-plugin-wrapper>
+        <div class="vw-plugin-top-wrapper"></div>
+      </div>
+    </div>
+    <script src="https://vlibras.gov.br/app/vlibras-plugin.js" async></script>
+    <script>
+      window.addEventListener('DOMContentLoaded', function(){
+        if (window.VLibras && window.VLibras.Widget) {
+          new window.VLibras.Widget('https://vlibras.gov.br/app');
+        } else {
+          console.warn('VLibras script não carregou ainda.');
+        }
+      });
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
