@@ -1,4 +1,3 @@
-```javascript
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useCrypto } from '../hooks/useCrypto'
@@ -38,7 +37,7 @@ export default function Dashboard({ onPageChange, currentUser }) {
     if (user && user.id) {
       setLoadingConta(true)
       // Buscar conta do usuário pelo endpoint específico
-      fetch(`${API_BASE_URL}/contas/usuario/${user.id}`)
+      fetch(API_BASE_URL + '/contas/usuario/' + user.id)
         .then(res => {
           if (!res.ok) throw new Error('Erro ao buscar conta')
           return res.json()
@@ -52,7 +51,7 @@ export default function Dashboard({ onPageChange, currentUser }) {
         .catch(error => {
           console.error('Erro ao buscar conta:', error)
           // Se falhar, tentar criar conta
-          fetch(`${API_BASE_URL}/contas`, {
+          fetch(API_BASE_URL + '/contas', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({saldo: '0.00', ganhos: '0.00', extrato: ''})
@@ -111,7 +110,7 @@ export default function Dashboard({ onPageChange, currentUser }) {
     setAddSaldoMsg('')
     
     // Manda o ID na URL e o valor no body
-    fetch(`${API_BASE_URL}/contas/adicionar-saldo/${contaId}`, { 
+    fetch(API_BASE_URL + '/contas/adicionar-saldo/' + contaId, { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ valor: addSaldoValor }) // valor no body
@@ -156,7 +155,7 @@ export default function Dashboard({ onPageChange, currentUser }) {
     setEnvioMsg('')
     
     // Manda os IDs na URL e o valor no body
-    fetch(`${API_BASE_URL}/contas/enviar/${contaId}?idDestino=${envioDestino}`, { 
+    fetch(API_BASE_URL + '/contas/enviar/' + contaId + '?idDestino=' + envioDestino, { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ valor: envioValor }) // valor no body
@@ -168,7 +167,7 @@ export default function Dashboard({ onPageChange, currentUser }) {
         .then(() => {
         setEnvioMsg('✅ Valor enviado com sucesso!')
         // Atualiza saldo e extrato
-        fetch(`${API_BASE_URL}/contas/${contaId}`)
+        fetch(API_BASE_URL + '/contas/' + contaId)
           .then(r => r.json())
           .then(data => {
             setAccount(data)
@@ -192,7 +191,7 @@ export default function Dashboard({ onPageChange, currentUser }) {
   // ALTERAR SENHA
   function handleUpdateSenha() {
     setLoadingUser(true)
-    fetch(`${API_BASE_URL}/users/${user.id}`, {
+    fetch(API_BASE_URL + '/users/' + user.id, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ ...user, password: novaSenha })
@@ -683,4 +682,3 @@ export default function Dashboard({ onPageChange, currentUser }) {
     </div>
   )
 }
-```
