@@ -1,3 +1,4 @@
+```javascript
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useCrypto } from '../hooks/useCrypto'
@@ -108,7 +109,13 @@ export default function Dashboard({ onPageChange, currentUser }) {
     }
     setAddSaldoLoading(true)
     setAddSaldoMsg('')
-    fetch(`${API_BASE_URL}/contas/adicionar-saldo/${contaId}?valor=${addSaldoValor}`, { method: 'POST' })
+    
+    // Manda o ID na URL e o valor no body
+    fetch(`${API_BASE_URL}/contas/adicionar-saldo/${contaId}`, { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valor: addSaldoValor }) // valor no body
+    })
       .then(res => {
         if (!res.ok) throw new Error('Erro ao adicionar saldo')
         return res.json()
@@ -147,7 +154,13 @@ export default function Dashboard({ onPageChange, currentUser }) {
     }
     setEnvioLoading(true)
     setEnvioMsg('')
-    fetch(`${API_BASE_URL}/contas/enviar/${contaId}?idDestino=${envioDestino}&valor=${envioValor}`, {method: 'POST'})
+    
+    // Manda os IDs na URL e o valor no body
+    fetch(`${API_BASE_URL}/contas/enviar/${contaId}?idDestino=${envioDestino}`, { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valor: envioValor }) // valor no body
+    })
       .then(res => {
         if (!res.ok) throw new Error('Erro ao enviar valor')
         return res.text()
@@ -670,4 +683,4 @@ export default function Dashboard({ onPageChange, currentUser }) {
     </div>
   )
 }
-
+```
